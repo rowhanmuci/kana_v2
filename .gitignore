@@ -1,0 +1,17 @@
+# secrets & data
+.env
+data/*.db
+data/*.db-wal
+data/*.db-shm
+*.log
+
+# python
+__pycache__/
+*.pyc
+.venv/
+venv/
+*.egg-info/
+.pytest_cache/
+
+# backups
+*.zip
