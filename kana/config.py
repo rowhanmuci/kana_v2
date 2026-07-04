@@ -29,7 +29,13 @@ class Settings(BaseSettings):
         extra="ignore",
     )
 
-    # ── 必填 ──
+    # ── 角色與通道 ──
+    character_id: str = "kana"            # characters/ 下的角色包目錄名
+    characters_dir: str = "./characters"
+    adapter: str = "discord"              # 對話通道：discord | cli（env: ADAPTER）
+    default_provider: str = "ollama"      # LLM provider（route() 讀它，切雲改這裡）
+
+    # ── Discord（adapter=discord 時必填）──
     discord_bot_token: str = ""
 
     # ── 本地模型 ──
@@ -53,9 +59,9 @@ class Settings(BaseSettings):
     timezone: str = "Asia/Taipei"
 
     # 預設全部走本地 Ollama。chat 吃人格用 chat_model，背景用 utility_model。
-    # 日後要把 chat 切回雲端，只改這個 method 即可。
+    # 日後要把 chat 切回雲端，只改這個 method（或 DEFAULT_PROVIDER env）即可。
     def route(self, call_type: str) -> ModelRoute:
-        provider = "ollama"
+        provider = self.default_provider
         table: dict[str, ModelRoute] = {
             "chat":       ModelRoute(provider, self.chat_model, 500, 0.85),
             "social":     ModelRoute(provider, self.chat_model, 2000, 0.85),

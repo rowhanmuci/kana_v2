@@ -41,3 +41,11 @@ def parse_iso(value: str | datetime | None) -> datetime | None:
 def now_taipei() -> datetime:
     """當前台北時間（給 prompt 顯示用）。"""
     return datetime.now(TAIPEI_TZ)
+
+
+def user_key(channel: str, sender_id: str) -> str:
+    """全系統 user_id 的單一格式：'{channel}:{sender_id}'。
+
+    多通道時避免不同平台的原生 id 撞號；組合點只在 domain（conversation.handle）。
+    """
+    return f"{channel}:{sender_id}"

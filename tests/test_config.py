@@ -15,3 +15,16 @@ def test_defaults_and_routing():
 
     # 未知類型 fallback
     assert s.route("nonexistent").provider == "ollama"
+
+
+def test_character_and_adapter_defaults():
+    s = Settings(_env_file=None)
+    assert s.character_id == "kana"
+    assert s.characters_dir == "./characters"
+    assert s.adapter == "discord"
+
+
+def test_default_provider_drives_route():
+    s = Settings(_env_file=None, default_provider="cloud")
+    assert s.route("chat").provider == "cloud"
+    assert s.route("nonexistent").provider == "cloud"

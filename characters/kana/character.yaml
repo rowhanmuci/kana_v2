@@ -1,0 +1,6 @@
+# 角色包 manifest。id 必須等於目錄名。
+id: kana
+name: 加奈
+full_name: 林加奈（Lin Kana）
+language: zh-TW
+timezone: Asia/Taipei

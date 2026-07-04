@@ -28,6 +28,7 @@ class _Base(BaseModel):
 
 
 class PersonaState(_Base):
+    character_id: str = ""
     current_activity: str = "idle"
     current_mood: str = "content"
     energy_level: int = 100
@@ -35,6 +36,7 @@ class PersonaState(_Base):
 
 
 class Relationship(_Base):
+    character_id: str = ""
     user_id: str
     display_name: str = ""
     first_met: datetime = Field(default_factory=now_utc)
@@ -49,6 +51,7 @@ class Relationship(_Base):
 
 class Message(_Base):
     id: int | None = None
+    character_id: str = ""
     user_id: str
     role: str
     content: str
@@ -57,6 +60,7 @@ class Message(_Base):
 
 class EpisodicMemory(_Base):
     id: int | None = None
+    character_id: str = ""
     user_id: str | None = None
     kind: str
     content: str

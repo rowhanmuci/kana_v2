@@ -1,6 +1,10 @@
-"""入口：接線所有層並啟動 Bot。
+"""入口：接線所有層並啟動。
 
-  config → Database(migrate) → Repositories → LLMClient → ConversationService → Discord
+  config → 角色包 → Database(migrate, 綁 character_id) → LLMClient
+        → PersonaPromptBuilder → ConversationService → adapter（config 驅動選擇）
+
+換通道：ADAPTER=cli（不需 Discord token，終端機直接對話）。
+換角色：CHARACTER_ID=<characters/ 下的目錄名>。
 """
 
 from __future__ import annotations
@@ -9,9 +13,13 @@ import asyncio
 import logging
 import sys
 
-from .adapters.discord_adapter import build_client
-from .config import get_settings
+from .adapters.base import ChatAdapter
+from .adapters.cli_adapter import CliAdapter
+from .adapters.discord_adapter import DiscordAdapter
+from .config import Settings, get_settings
+from .domain.character import load_character
 from .domain.conversation import ConversationService
+from .domain.persona import PersonaPromptBuilder
 from .infra.embeddings import sqlite_vec_available
 from .infra.llm import LLMClient
 from .infra.repository import Repositories
@@ -24,26 +32,40 @@ logging.basicConfig(
 logger = logging.getLogger("kana.main")
 
 
+def _build_adapter(settings: Settings) -> ChatAdapter:
+    """config 驅動的通道選擇。加新通道：實作 ChatAdapter 後在這裡註冊一行。"""
+    if settings.adapter == "discord":
+        if not settings.discord_bot_token:
+            logger.error("adapter=discord 但 DISCORD_BOT_TOKEN 未設定，無法啟動")
+            sys.exit(1)
+        return DiscordAdapter(settings.discord_bot_token)
+    if settings.adapter == "cli":
+        return CliAdapter()
+    logger.error("未知的 adapter：%s（支援 discord | cli）", settings.adapter)
+    sys.exit(1)
+
+
 async def _main() -> None:
     settings = get_settings()
-    if not settings.discord_bot_token:
-        logger.error("DISCORD_BOT_TOKEN 未設定，無法啟動")
-        sys.exit(1)
 
+    character = load_character(settings.characters_dir, settings.character_id)
+    logger.info("角色載入：%s（id=%s）", character.name, character.id)
+
+    adapter = _build_adapter(settings)
     logger.info("sqlite-vec 檢查（Phase 2 需要）：%s", sqlite_vec_available())
 
-    repos = await Repositories.create(settings.database_path)
+    repos = await Repositories.create(settings.database_path, character.id)
     logger.info("資料庫就緒：%s", settings.database_path)
 
     llm = LLMClient.from_settings(settings)
-    conversation = ConversationService(repos, llm)
-    client = build_client(conversation)
+    builder = PersonaPromptBuilder(character)
+    conversation = ConversationService(repos, llm, builder)
 
-    logger.info("啟動加奈 v2（chat=%s）", settings.chat_model)
+    logger.info("啟動 %s v2（adapter=%s, chat=%s）", character.name, adapter.name, settings.chat_model)
     try:
-        await client.start(settings.discord_bot_token)
+        await adapter.run(conversation.handle)
     finally:
-        await client.close()
+        await adapter.close()
         await repos.close()
 
 
