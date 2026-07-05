@@ -48,7 +48,8 @@ infra/      被共用的基礎設施（db、models、repository、llm、embeddin
 
 ```bash
 pytest -q                    # 自動化測試（用 FakeProvider，不需 Ollama / 不需網路）
-ADAPTER=cli python -m kana   # 終端機直接和角色對話（需 Ollama，不需 Discord token）——調語氣的最短迴路
+python -m kana cli           # 終端機直接和角色對話（需 Ollama，不需 Discord token）——調語氣的最短迴路
+                             # 位置參數選通道，免設 env（PowerShell/cmd 通用）；CLI 模式 log 只寫 kana.log
 python -m kana               # Discord bot（需 .env 的 DISCORD_BOT_TOKEN + Ollama 已 pull 模型）
 pip install -e ".[dev]"      # 安裝依賴
 ```
@@ -56,7 +57,7 @@ pip install -e ".[dev]"      # 安裝依賴
 ## 測試策略
 
 - **自動化測試不碰 LLM**：用 [FakeProvider](kana/infra/llm.py) 注入假回覆，所以 `pytest` 不需要 pull 任何模型、不需網路。涵蓋型別層、寫入序列化（含並發無 lock）、模型路由、JSON 解析、角色包載入與 prompt 組裝、角色資料隔離、user_id 命名空間、對話 round-trip。
-- **真實端到端要 Ollama**：語氣調校先用 `ADAPTER=cli` 跑本地 Qwen（`ollama pull qwen3:14b`，退路 qwen3:8b）；Discord 行為才需要 token。embedding 的 bge-m3 到 Phase 2 才需要。
+- **真實端到端要 Ollama**：語氣調校先用 `python -m kana cli` 跑本地 Qwen（`ollama pull qwen3:14b`，退路 qwen3:8b）；Discord 行為才需要 token。embedding 的 bge-m3 到 Phase 2 才需要。
 - 新功能優先寫成可用 FakeProvider 測的單元，把「要真模型才驗得到」的部分壓到最小。
 
 ## 慣例

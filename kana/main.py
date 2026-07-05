@@ -3,7 +3,7 @@
   config → 角色包 → Database(migrate, 綁 character_id) → LLMClient
         → PersonaPromptBuilder → ConversationService → adapter（config 驅動選擇）
 
-換通道：ADAPTER=cli（不需 Discord token，終端機直接對話）。
+換通道：`python -m kana cli`（或 env ADAPTER=cli）——不需 Discord token，終端機直接對話。
 換角色：CHARACTER_ID=<characters/ 下的目錄名>。
 """
 
@@ -24,12 +24,19 @@ from .infra.embeddings import sqlite_vec_available
 from .infra.llm import LLMClient
 from .infra.repository import Repositories
 
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
-    handlers=[logging.StreamHandler(), logging.FileHandler("kana.log", encoding="utf-8")],
-)
 logger = logging.getLogger("kana.main")
+
+
+def _setup_logging(console: bool) -> None:
+    """CLI 模式 log 只寫檔，畫面留給對話；其他模式照舊雙輸出。"""
+    handlers: list[logging.Handler] = [logging.FileHandler("kana.log", encoding="utf-8")]
+    if console:
+        handlers.append(logging.StreamHandler())
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
+        handlers=handlers,
+    )
 
 
 def _build_adapter(settings: Settings) -> ChatAdapter:
@@ -45,8 +52,11 @@ def _build_adapter(settings: Settings) -> ChatAdapter:
     sys.exit(1)
 
 
-async def _main() -> None:
+async def _main(adapter_override: str | None = None) -> None:
     settings = get_settings()
+    if adapter_override:
+        settings.adapter = adapter_override
+    _setup_logging(console=settings.adapter != "cli")
 
     character = load_character(settings.characters_dir, settings.character_id)
     logger.info("角色載入：%s（id=%s）", character.name, character.id)
@@ -70,8 +80,10 @@ async def _main() -> None:
 
 
 def run() -> None:
+    # `python -m kana cli` 直接指定通道，免設環境變數（PowerShell/cmd 語法不同易踩雷）
+    adapter_override = sys.argv[1] if len(sys.argv) > 1 else None
     try:
-        asyncio.run(_main())
+        asyncio.run(_main(adapter_override))
     except KeyboardInterrupt:
         logger.info("收到中斷，關閉")
 
