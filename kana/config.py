@@ -50,6 +50,16 @@ class Settings(BaseSettings):
     # 延遲整體縮放：1.0 = 真實節奏（idle 中位數約 1 分鐘）；測試/調校設 0 立即回。
     pacing_scale: float = 1.0
 
+    # ── 記憶檢索（三項加權，見 domain/memory.py；調味靠實測手感）──
+    memory_recall_k: int = 5             # 每次注入幾筆記憶
+    memory_candidate_pool: int = 50      # KNN 候選數
+    memory_w_relevance: float = 0.55
+    memory_w_recency: float = 0.25
+    memory_w_importance: float = 0.20
+    memory_half_life_days: float = 3.0
+    memory_cooldown_hours: float = 6.0   # 剛想起過的事的冷卻
+    memory_min_age_minutes: int = 90     # 太新的不撈（還在對話歷史裡）
+
     # ── 資料庫 ──
     database_path: str = "./data/kana.db"
 

@@ -4,8 +4,8 @@
 
 ## 現況
 
-**Phase 1（對話品質＋角色深化）機制完成，語氣迭代進行中。** 對話節奏（`domain/pacing.py` 決策、adapter 執行、handler 契約 `InboundMessage → ReplyPlan`）、關係演化（`domain/relationship.py`，結構化抽取＋淨化層，known_facts 上限 30）、backstory 已擴寫成傳記、45 個自動化測試綠燈。v1 的承諾抽取確定不做（實測效果不好）。
-語氣迭代靠 `python -m kana cli` 持續進行（已修：假承諾句式、括號舞台指示、編造歌名）。下一步是 Phase 2（檢索式記憶）。各 phase 的範圍與完成標準見 REBUILD_PLAN.md 第 6 節。
+**Phase 2（檢索式記憶）完成。** `domain/memory.py` 三項加權召回（relevance/recency/importance＋冷卻懲罰，權重在 config）、sqlite-vec + bge-m3 向量化、跨 session 召回已實測（清史後仍想起「麻糬」）。Phase 1 的對話節奏（`pacing.py`、`InboundMessage → ReplyPlan` 契約）與關係演化（`relationship.py`，淨化層防 v1 髒資料死因）都在跑，55 個自動化測試綠燈。v1 的承諾抽取確定不做（實測效果不好）。
+語氣迭代靠 `python -m kana cli` 持續（已修：假承諾句式、編造歌名；括號舞台指示偶發，繼續壓）。下一步是 Phase 3（生活：每日事件生成器、affect、life-plan）。各 phase 的範圍與完成標準見 REBUILD_PLAN.md 第 6 節。
 
 ## 架構分層（依賴方向由上往下，下層不認識上層）
 
@@ -24,7 +24,7 @@ infra/      被共用的基礎設施（db、models、repository、llm、embeddin
 - [kana/domain/character.py](kana/domain/character.py) — 角色包載入。固定檔名約定：core/speech/never 必要、backstory/tastes 選配、notes/ 是機器可改寫區（Phase 4 知識種子）。
 - [kana/domain/persona.py](kana/domain/persona.py) — `PersonaPromptBuilder`：靜態前綴（core+speech+背景+品味）快取、動態段（狀態/關係/`extra_sections`）、never 壓陣。Phase 2+ 的記憶/事件/筆記都從 `extra_sections` 注入，不改簽名。
 - [kana/adapters/base.py](kana/adapters/base.py) — adapter 介面。adapter 只認識 `InboundMessage` 與 `ReplyPlan`，handler 由 main 注入，不認識 domain service。節奏分工：domain 決策（[pacing.py](kana/domain/pacing.py)），adapter 執行（sleep/typing/send）。
-- [kana/util.py](kana/util.py) — 時間規則的單一來源（aware UTC ↔ ISO-8601）+ `user_key()`（user_id 命名空間的單一來源）。
+- [kana/util.py](kana/util.py) — 時間規則的單一來源（aware UTC ↔ ISO-8601）+ `user_key()`（user_id 命名空間的單一來源）+ `humanize_age()`（prompt 用相對時間）。
 - [kana/infra/db.py](kana/infra/db.py) — aiosqlite 單長壽連線 + `_write_lock` 序列化寫入。多句原子交易用 `execute_in_tx`。
 - [kana/infra/models.py](kana/infra/models.py) — 每張表一個 Pydantic model，系統內流動的是型別物件不是裸 dict。
 - [kana/infra/repository.py](kana/infra/repository.py) — SQL 全收在這層；JSON 欄位在邊界序列化。`Repositories.create(path, character_id)` 建構時綁定角色，domain 呼叫端不帶 character_id。

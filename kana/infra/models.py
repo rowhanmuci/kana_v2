@@ -20,9 +20,9 @@ class _Base(BaseModel):
     @field_validator("*", mode="before")
     @classmethod
     def _coerce_dt(cls, v, info):
-        # 讓任何宣告為 datetime 的欄位都能吃 ISO 字串
+        # 讓任何宣告為 datetime（含 Optional）的欄位都能吃 ISO 字串
         ann = cls.model_fields[info.field_name].annotation
-        if ann in (datetime, "datetime") and isinstance(v, str):
+        if isinstance(v, str) and "datetime.datetime" in str(ann):
             return parse_iso(v)
         return v
 
@@ -66,3 +66,4 @@ class EpisodicMemory(_Base):
     content: str
     importance: float = 0.5
     created_at: datetime = Field(default_factory=now_utc)
+    last_recalled_at: datetime | None = None

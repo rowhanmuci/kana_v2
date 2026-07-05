@@ -19,8 +19,9 @@ from .adapters.discord_adapter import DiscordAdapter
 from .config import Settings, get_settings
 from .domain.character import load_character
 from .domain.conversation import ConversationService
+from .domain.memory import MemoryService, RecallWeights
 from .domain.persona import PersonaPromptBuilder
-from .infra.embeddings import sqlite_vec_available
+from .infra.embeddings import OllamaEmbeddingProvider
 from .infra.llm import LLMClient
 from .infra.repository import Repositories
 
@@ -62,16 +63,32 @@ async def _main(adapter_override: str | None = None) -> None:
     logger.info("角色載入：%s（id=%s）", character.name, character.id)
 
     adapter = _build_adapter(settings)
-    logger.info("sqlite-vec 檢查（Phase 2 需要）：%s", sqlite_vec_available())
 
     repos = await Repositories.create(settings.database_path, character.id)
-    logger.info("資料庫就緒：%s", settings.database_path)
+    logger.info("資料庫就緒：%s（向量檢索：%s）",
+                settings.database_path, "開" if repos.db.vec_enabled else "關")
 
     llm = LLMClient.from_settings(settings)
+    embeddings = OllamaEmbeddingProvider(settings.ollama_host, settings.embedding_model)
+    memory = MemoryService(
+        repos, embeddings,
+        RecallWeights(
+            relevance=settings.memory_w_relevance,
+            recency=settings.memory_w_recency,
+            importance=settings.memory_w_importance,
+            half_life_days=settings.memory_half_life_days,
+            cooldown_hours=settings.memory_cooldown_hours,
+        ),
+        candidate_pool=settings.memory_candidate_pool,
+        min_age_minutes=settings.memory_min_age_minutes,
+    )
     builder = PersonaPromptBuilder(character)
     # CLI 是調語氣的迴路，不模擬延遲
     scale = 0.0 if settings.adapter == "cli" else settings.pacing_scale
-    conversation = ConversationService(repos, llm, builder, pacing_scale=scale)
+    conversation = ConversationService(
+        repos, llm, builder, memory=memory,
+        pacing_scale=scale, recall_k=settings.memory_recall_k,
+    )
 
     logger.info("啟動 %s v2（adapter=%s, chat=%s）", character.name, adapter.name, settings.chat_model)
     try:

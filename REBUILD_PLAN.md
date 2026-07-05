@@ -163,10 +163,14 @@ score = w_rel · relevance(cosine)
 - **v1 的承諾抽取（todo_commitments）確定不做**：實測效果不好。never.md 反向處理：她不說做不到的承諾。
 - **完成標準**：DM 對話順暢、語氣大致對味；delay/關係抽取可單元測試（✅ 45 測試綠）；驗收工具是 CLI adapter。
 
-### Phase 2 — 檢索式記憶
-- episodic memory + sqlite-vec，三項加權檢索、去重、衰減。寫入天然帶 character_id 與命名空間化 user_id。
-- 檢索結果經 `PromptSection` 注入，builder 簽名不變。
-- **完成標準**：她在對的時機想起對的舊事，而不是只看最近幾筆；權重可調。
+### Phase 2 — 檢索式記憶 ✅
+- `domain/memory.py`：`MemoryService.remember`（寫入＋bge-m3 向量化）/ `recall`（三項加權：w_rel·cosine + w_rec·半衰期衰減 + w_imp·importance − 冷卻懲罰）。權重全收在 config（MEMORY_W_* 等），調味靠實測。
+- sqlite-vec `vec0` 虛擬表（cosine metric，rowid 對應 memory_episodic.id），DDL 在 db.py——extension 載入失敗時優雅退化為 recency+importance，不擋啟動。
+- 防跳針：`last_recalled_at` 冷卻懲罰（剛想起的事 6 小時內降權）；太新的記憶（<90 分鐘）不撈——還在對話歷史視窗裡。
+- 檢索範圍：她自己的記憶（user_id=NULL）＋與這個人的記憶——**別人的對話不會洩漏**（有測試背書）。
+- 對話摘要由關係演化寫入時就向量化，檢索資料隨對話自動累積。
+- **已驗收**：清空 message_log 後只說「我家那隻又拆家了」，她從向量記憶答出「麻糬又在搞破壞啊？柴犬真的會這樣嗎」。
+- 未做（等實測需要再上）：MMR 多樣性、記憶合併摘要（遺忘壓縮）、re-ranker。
 
 ### Phase 3 — 生活（解問題二·輕量版）
 - 每日事件生成器：具體、帶情緒、有連續性的微事件，寫入 memory 並成為對話燃料。

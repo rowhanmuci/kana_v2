@@ -49,3 +49,19 @@ def user_key(channel: str, sender_id: str) -> str:
     多通道時避免不同平台的原生 id 撞號；組合點只在 domain（conversation.handle）。
     """
     return f"{channel}:{sender_id}"
+
+
+def humanize_age(dt: datetime, now: datetime | None = None) -> str:
+    """給 prompt 用的相對時間：「剛剛 / N 小時前 / 昨天 / N 天前」。"""
+    now = now or now_utc()
+    delta = now - dt
+    if delta < timedelta(hours=1):
+        return "剛剛"
+    if delta < timedelta(hours=24):
+        return f"{int(delta.total_seconds() // 3600)} 小時前"
+    days = int(delta.total_seconds() // 86400)
+    if days == 1:
+        return "昨天"
+    if days < 30:
+        return f"{days} 天前"
+    return f"{days // 30} 個月前"

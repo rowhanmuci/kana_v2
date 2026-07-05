@@ -22,9 +22,10 @@ from pydantic import BaseModel
 
 from ..infra.llm import LLMClient
 from ..infra.repository import Repositories
-from ..util import user_key
+from ..util import humanize_age, user_key
+from .memory import MemoryService
 from .pacing import ReplyPlan, plan_reply
-from .persona import PersonaPromptBuilder
+from .persona import PersonaPromptBuilder, PromptSection
 from .relationship import RelationshipEvolver
 
 logger = logging.getLogger("kana.conversation")
@@ -43,14 +44,17 @@ class InboundMessage(BaseModel):
 
 class ConversationService:
     def __init__(self, repos: Repositories, llm: LLMClient,
-                 persona: PersonaPromptBuilder, history_limit: int = 10,
-                 pacing_scale: float = 1.0):
+                 persona: PersonaPromptBuilder, memory: MemoryService | None = None,
+                 history_limit: int = 10, pacing_scale: float = 1.0,
+                 recall_k: int = 5):
         self._repos = repos
         self._llm = llm
         self._persona = persona
+        self._memory = memory
         self._history_limit = history_limit
         self._pacing_scale = pacing_scale
-        self._evolver = RelationshipEvolver(repos, llm)
+        self._recall_k = recall_k
+        self._evolver = RelationshipEvolver(repos, llm, memory=memory)
         self._bg_tasks: set[asyncio.Task] = set()
 
     async def handle(self, msg: InboundMessage) -> ReplyPlan:
@@ -62,7 +66,19 @@ class ConversationService:
         history = await self._repos.message.recent(uid, limit=self._history_limit)
         messages = [{"role": m.role, "content": m.content} for m in history]
 
-        system = self._persona.build(state, rel)
+        extra: list[PromptSection] = []
+        if self._memory is not None:
+            memories = await self._memory.recall(msg.text, user_id=uid, k=self._recall_k)
+            if memories:
+                lines = "\n".join(
+                    f"-（{humanize_age(m.created_at)}）{m.content}" for m in memories
+                )
+                extra.append(PromptSection(
+                    "你想起的事",
+                    lines + "\n（自然地用，該提就提，不用硬塞進回覆）",
+                ))
+
+        system = self._persona.build(state, rel, extra_sections=extra)
         try:
             reply = await self._llm.chat("chat", messages=messages, system=system)
         except Exception as e:

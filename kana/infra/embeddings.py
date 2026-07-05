@@ -37,6 +37,25 @@ class OllamaEmbeddingProvider(EmbeddingProvider):
         return data.get("embeddings", [])
 
 
+class FakeEmbeddingProvider(EmbeddingProvider):
+    """測試用：依對照表回傳固定向量，未知文字回傳 fallback。
+
+    對照表用「子字串命中」：key 出現在文字裡就回它的向量，
+    讓測試能控制「哪段記憶跟哪個 query 相似」。
+    """
+
+    def __init__(self, table: dict[str, list[float]], fallback: list[float]):
+        self._table = table
+        self._fallback = fallback
+
+    async def embed(self, texts: list[str]) -> list[list[float]]:
+        out = []
+        for t in texts:
+            vec = next((v for k, v in self._table.items() if k in t), self._fallback)
+            out.append(vec)
+        return out
+
+
 def sqlite_vec_available() -> bool:
     """檢查 sqlite-vec 是否可載入（Phase 2 需要）。"""
     try:

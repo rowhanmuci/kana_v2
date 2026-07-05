@@ -11,10 +11,16 @@ domain 呼叫端不用帶 character_id（單角色運行零負擔），
 from __future__ import annotations
 
 import json
+import struct
 
 from .db import Database
 from .models import EpisodicMemory, Message, PersonaState, Relationship
 from ..util import now_utc, to_iso
+
+
+def _pack(embedding: list[float]) -> bytes:
+    """sqlite-vec 的向量序列化格式：float32 小端連續排列。"""
+    return struct.pack(f"{len(embedding)}f", *embedding)
 
 
 class PersonaStateRepo:
@@ -174,6 +180,40 @@ class EpisodicMemoryRepo:
             )
         return [EpisodicMemory(**dict(r)) for r in rows]
 
+    # ── 向量檢索（依賴 sqlite-vec；db.vec_enabled=False 時這些方法不可呼叫）──
+
+    async def set_vector(self, memory_id: int, embedding: list[float]) -> None:
+        await self._db.execute(
+            "INSERT OR REPLACE INTO memory_vec (rowid, embedding) VALUES (?, ?)",
+            (memory_id, _pack(embedding)),
+        )
+
+    async def knn(self, embedding: list[float], k: int) -> list[tuple[EpisodicMemory, float]]:
+        """KNN 候選：回傳 (記憶, cosine 距離)。距離 = 1 - cosine 相似度，越小越像。
+
+        vec0 的 KNN 不能帶額外 WHERE，所以先取 k 個 rowid 再 join 過濾 character——
+        單角色運行時 memory_vec 幾乎全是自己的，過濾損耗可忽略。
+        """
+        rows = await self._db.fetchall(
+            "SELECT m.*, v.distance AS _distance "
+            "FROM (SELECT rowid, distance FROM memory_vec WHERE embedding MATCH ? AND k = ?) v "
+            "JOIN memory_episodic m ON m.id = v.rowid "
+            "WHERE m.character_id = ?",
+            (_pack(embedding), k, self._char),
+        )
+        return [(EpisodicMemory(**dict(r)), r["_distance"]) for r in rows]
+
+    async def mark_recalled(self, memory_ids: list[int]) -> None:
+        """記下「剛被想起」：之後一段時間內同一件事會被降權，避免跳針。"""
+        if not memory_ids:
+            return
+        now = to_iso(now_utc())
+        placeholders = ",".join("?" for _ in memory_ids)
+        await self._db.execute(
+            f"UPDATE memory_episodic SET last_recalled_at = ? WHERE id IN ({placeholders})",
+            (now, *memory_ids),
+        )
+
 
 class Repositories:
     """所有 repository 的容器，持有 Database 並綁定一個角色。"""
@@ -187,8 +227,9 @@ class Repositories:
         self.memory = EpisodicMemoryRepo(db, character_id)
 
     @classmethod
-    async def create(cls, path: str, character_id: str) -> "Repositories":
-        db = Database(path)
+    async def create(cls, path: str, character_id: str,
+                     embedding_dim: int = 1024) -> "Repositories":
+        db = Database(path, embedding_dim=embedding_dim)
         await db.connect()
         await db.migrate()
         return cls(db, character_id)

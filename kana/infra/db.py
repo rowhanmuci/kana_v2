@@ -10,18 +10,30 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 from pathlib import Path
 
 import aiosqlite
 
+logger = logging.getLogger("kana.db")
+
 _SCHEMA_PATH = Path(__file__).with_name("schema.sql")
+
+# 向量表的 DDL 放這裡而不是 schema.sql：它依賴 sqlite-vec extension，
+# extension 載入失敗時要能跳過（記憶檢索退化為 recency+importance，不擋啟動）。
+_VEC_DDL = (
+    "CREATE VIRTUAL TABLE IF NOT EXISTS memory_vec "
+    "USING vec0(embedding float[{dim}] distance_metric=cosine)"
+)
 
 
 class Database:
-    def __init__(self, path: str):
+    def __init__(self, path: str, embedding_dim: int = 1024):
         self._path = path
+        self._embedding_dim = embedding_dim
         self._conn: aiosqlite.Connection | None = None
         self._write_lock = asyncio.Lock()
+        self.vec_enabled = False
 
     async def connect(self) -> None:
         Path(self._path).parent.mkdir(parents=True, exist_ok=True)
@@ -32,12 +44,27 @@ class Database:
         await self._conn.execute("PRAGMA foreign_keys=ON")
         await self._conn.execute("PRAGMA synchronous=NORMAL")
         await self._conn.commit()
+        await self._load_vec()
+
+    async def _load_vec(self) -> None:
+        try:
+            import sqlite_vec
+
+            await self._conn.enable_load_extension(True)
+            await self._conn.load_extension(sqlite_vec.loadable_path())
+            await self._conn.enable_load_extension(False)
+            self.vec_enabled = True
+        except Exception as e:
+            logger.warning("sqlite-vec 載入失敗，向量檢索停用：%s", e)
+            self.vec_enabled = False
 
     async def migrate(self) -> None:
         assert self._conn is not None, "connect() 尚未呼叫"
         script = _SCHEMA_PATH.read_text(encoding="utf-8")
         async with self._write_lock:
             await self._conn.executescript(script)
+            if self.vec_enabled:
+                await self._conn.execute(_VEC_DDL.format(dim=self._embedding_dim))
             await self._conn.commit()
 
     async def close(self) -> None:

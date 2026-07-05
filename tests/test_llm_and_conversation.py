@@ -1,9 +1,14 @@
+from datetime import timedelta
+
 from kana.config import Settings
 from kana.domain.character import Character
 from kana.domain.conversation import ConversationService, InboundMessage
+from kana.domain.memory import MemoryService, RecallWeights
 from kana.domain.persona import PersonaPromptBuilder
+from kana.infra.embeddings import FakeEmbeddingProvider
 from kana.infra.llm import FakeProvider, LLMClient
 from kana.infra.repository import Repositories
+from kana.util import now_utc, to_iso
 
 
 def _client(handler):
@@ -96,5 +101,39 @@ async def test_conversation_strips_timestamp_prefix(tmp_path):
         plan = await convo.handle(_msg("在幹嘛"))
         assert plan.parts == ["在寫論文啊"]
         await convo.drain()
+    finally:
+        await repos.close()
+
+
+async def test_conversation_injects_recalled_memory(tmp_path):
+    """有相關舊記憶時，system prompt 出現「你想起的事」段。"""
+    captured = {}
+
+    def handler(**kw):
+        if kw.get("fmt"):
+            return '{"summary": "", "familiarity_delta": 0, "affection_delta": 0, ' \
+                   '"new_known_facts": [], "new_inside_jokes": [], "mood_toward_user": "neutral"}'
+        captured.update(kw)
+        return "麻糬還是一樣吵喔"
+
+    repos = await Repositories.create(str(tmp_path / "mi.db"), "t", embedding_dim=4)
+    try:
+        embed = FakeEmbeddingProvider({"貓": [1.0, 0, 0, 0]}, [0, 0, 0, 1.0])
+        memory = MemoryService(repos, embed, RecallWeights(), min_age_minutes=0)
+
+        mem = await memory.remember("conversation", "他家的貓叫麻糬", user_id="cli:u1")
+        await repos.db.execute(
+            "UPDATE memory_episodic SET created_at = ? WHERE id = ?",
+            (to_iso(now_utc() - timedelta(days=3)), mem.id),
+        )
+
+        convo = ConversationService(repos, _client(handler), _builder(),
+                                    memory=memory, pacing_scale=0.0)
+        await convo.handle(_msg("我家貓最近會開門了"))
+        await convo.drain()
+
+        assert "你想起的事" in captured["system"]
+        assert "麻糬" in captured["system"]
+        assert "3 天前" in captured["system"]
     finally:
         await repos.close()

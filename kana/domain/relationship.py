@@ -120,11 +120,16 @@ class EvolutionResult(BaseModel):
 
 
 class RelationshipEvolver:
-    """對話後跑一次抽取＋更新。失敗只記 log，不影響對話主流程。"""
+    """對話後跑一次抽取＋更新。失敗只記 log，不影響對話主流程。
 
-    def __init__(self, repos: Repositories, llm: LLMClient):
+    對話摘要經 MemoryService 寫入（會向量化，Phase 2 檢索用）；
+    沒給 memory 時退回直接寫 repo（無向量，仍可靠 recency 撈到）。
+    """
+
+    def __init__(self, repos: Repositories, llm: LLMClient, memory=None):
         self._repos = repos
         self._llm = llm
+        self._memory = memory
 
     async def evolve(self, user_id: str, user_text: str, reply_text: str) -> None:
         try:
@@ -162,14 +167,17 @@ class RelationshipEvolver:
             last_mood_toward=result.mood_toward_user,
         )
 
-        # 對話摘要進 episodic memory：Phase 2 檢索的資料就從現在開始累積
+        # 對話摘要進 episodic memory（帶向量），檢索資料持續累積
         if result.summary:
             importance = result.importance
             if result.emotional_moment:
                 importance = max(importance, 0.7)
-            await self._repos.memory.add(
-                "conversation", result.summary, user_id=user_id, importance=importance,
-            )
+            if self._memory is not None:
+                await self._memory.remember(
+                    "conversation", result.summary, user_id=user_id, importance=importance)
+            else:
+                await self._repos.memory.add(
+                    "conversation", result.summary, user_id=user_id, importance=importance)
 
         logger.info(
             "關係演化：user=%s fam=%+d aff=%+d stage=%s facts+%d",

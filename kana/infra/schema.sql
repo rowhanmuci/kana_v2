@@ -41,14 +41,16 @@ CREATE TABLE IF NOT EXISTS message_log (
 );
 CREATE INDEX IF NOT EXISTS idx_message_char_user ON message_log (character_id, user_id, id);
 
--- 情節記憶（Phase 2 接向量檢索；先建表）
+-- 情節記憶。向量存在 memory_vec 虛擬表（rowid 對應本表 id），
+-- 其 DDL 在 db.py——依賴 sqlite-vec extension，載入失敗時檢索退化不擋啟動。
 CREATE TABLE IF NOT EXISTS memory_episodic (
-    id           INTEGER PRIMARY KEY AUTOINCREMENT,
-    character_id TEXT    NOT NULL,
-    user_id      TEXT,                          -- 可為 NULL（關於角色自己的記憶）
-    kind         TEXT    NOT NULL,              -- conversation | self | world | reflection | event
-    content      TEXT    NOT NULL,
-    importance   REAL    NOT NULL DEFAULT 0.5,  -- 0..1，檢索加權用
-    created_at   TEXT    NOT NULL
+    id               INTEGER PRIMARY KEY AUTOINCREMENT,
+    character_id     TEXT    NOT NULL,
+    user_id          TEXT,                          -- 可為 NULL（關於角色自己的記憶）
+    kind             TEXT    NOT NULL,              -- conversation | self | world | reflection | event
+    content          TEXT    NOT NULL,
+    importance       REAL    NOT NULL DEFAULT 0.5,  -- 0..1，檢索加權用
+    created_at       TEXT    NOT NULL,
+    last_recalled_at TEXT                           -- 上次被想起；懲罰「一直想起同一件事」
 );
 CREATE INDEX IF NOT EXISTS idx_memory_char_created ON memory_episodic (character_id, created_at);
