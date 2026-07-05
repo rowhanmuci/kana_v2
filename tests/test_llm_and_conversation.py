@@ -49,14 +49,22 @@ async def test_conversation_roundtrip(tmp_path):
     captured = {}
 
     def handler(**kw):
+        if kw.get("fmt"):  # 關係演化的結構化呼叫
+            return '{"summary": "寒暄", "familiarity_delta": 1, "affection_delta": 1, ' \
+                   '"new_known_facts": [], "new_inside_jokes": [], "mood_toward_user": "neutral"}'
         captured.update(kw)
         return "喔，還好啦"
 
     repos = await Repositories.create(str(tmp_path / "c.db"), "t")
     try:
-        convo = ConversationService(repos, _client(handler), _builder())
-        reply = await convo.handle(_msg("妳今天好嗎"))
-        assert reply == "喔，還好啦"
+        convo = ConversationService(repos, _client(handler), _builder(), pacing_scale=0.0)
+        plan = await convo.handle(_msg("妳今天好嗎"))
+        assert plan.parts == ["喔，還好啦"]
+        await convo.drain()
+
+        # 背景演化有跑：關係值動了
+        rel_after = await repos.relationship.get("cli:u1")
+        assert rel_after.familiarity == 1
 
         # system prompt 來自注入的角色包，不是寫死的
         assert "測試核心人設" in captured["system"]
@@ -77,12 +85,16 @@ async def test_conversation_roundtrip(tmp_path):
 
 async def test_conversation_strips_timestamp_prefix(tmp_path):
     def handler(**kw):
+        if kw.get("fmt"):
+            return '{"summary": "", "familiarity_delta": 0, "affection_delta": 0, ' \
+                   '"new_known_facts": [], "new_inside_jokes": [], "mood_toward_user": "neutral"}'
         return "[2026-05-19 22:53] 在寫論文啊"
 
     repos = await Repositories.create(str(tmp_path / "c2.db"), "t")
     try:
-        convo = ConversationService(repos, _client(handler), _builder())
-        reply = await convo.handle(_msg("在幹嘛"))
-        assert reply == "在寫論文啊"
+        convo = ConversationService(repos, _client(handler), _builder(), pacing_scale=0.0)
+        plan = await convo.handle(_msg("在幹嘛"))
+        assert plan.parts == ["在寫論文啊"]
+        await convo.drain()
     finally:
         await repos.close()

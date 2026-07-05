@@ -4,8 +4,8 @@
 
 ## 現況
 
-**Phase 0.5（模組化重構）完成。** 角色包資料化（`characters/kana/`）、adapter 抽象（discord + cli）、schema 全表帶 character_id、user_id 平台命名空間、25 個自動化測試綠燈。
-下一步是 Phase 1（對話品質 + 角色深化：延遲節奏、關係演化、backstory 擴寫成傳記、CLI 調語氣）。各 phase 的範圍與完成標準見 REBUILD_PLAN.md 第 6 節。
+**Phase 1（對話品質＋角色深化）機制完成，語氣迭代進行中。** 對話節奏（`domain/pacing.py` 決策、adapter 執行、handler 契約 `InboundMessage → ReplyPlan`）、關係演化（`domain/relationship.py`，結構化抽取＋淨化層，known_facts 上限 30）、backstory 已擴寫成傳記、45 個自動化測試綠燈。v1 的承諾抽取確定不做（實測效果不好）。
+語氣迭代靠 `python -m kana cli` 持續進行（已修：假承諾句式、括號舞台指示、編造歌名）。下一步是 Phase 2（檢索式記憶）。各 phase 的範圍與完成標準見 REBUILD_PLAN.md 第 6 節。
 
 ## 架構分層（依賴方向由上往下，下層不認識上層）
 
@@ -23,7 +23,7 @@ infra/      被共用的基礎設施（db、models、repository、llm、embeddin
 - [kana/config.py](kana/config.py) — 設定單一來源。`Settings.route(call_type)` 把每種呼叫（chat/social/memory/heartbeat…）對應到 provider/model/token。**切換本地↔雲（`DEFAULT_PROVIDER`）、換模型、換通道（`ADAPTER`）、換角色（`CHARACTER_ID`）都只改這裡**，不動 domain。
 - [kana/domain/character.py](kana/domain/character.py) — 角色包載入。固定檔名約定：core/speech/never 必要、backstory/tastes 選配、notes/ 是機器可改寫區（Phase 4 知識種子）。
 - [kana/domain/persona.py](kana/domain/persona.py) — `PersonaPromptBuilder`：靜態前綴（core+speech+背景+品味）快取、動態段（狀態/關係/`extra_sections`）、never 壓陣。Phase 2+ 的記憶/事件/筆記都從 `extra_sections` 注入，不改簽名。
-- [kana/adapters/base.py](kana/adapters/base.py) — adapter 介面。adapter 只認識 `InboundMessage` 與回覆字串，handler 由 main 注入，不認識 domain service。
+- [kana/adapters/base.py](kana/adapters/base.py) — adapter 介面。adapter 只認識 `InboundMessage` 與 `ReplyPlan`，handler 由 main 注入，不認識 domain service。節奏分工：domain 決策（[pacing.py](kana/domain/pacing.py)），adapter 執行（sleep/typing/send）。
 - [kana/util.py](kana/util.py) — 時間規則的單一來源（aware UTC ↔ ISO-8601）+ `user_key()`（user_id 命名空間的單一來源）。
 - [kana/infra/db.py](kana/infra/db.py) — aiosqlite 單長壽連線 + `_write_lock` 序列化寫入。多句原子交易用 `execute_in_tx`。
 - [kana/infra/models.py](kana/infra/models.py) — 每張表一個 Pydantic model，系統內流動的是型別物件不是裸 dict。

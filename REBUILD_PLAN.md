@@ -155,12 +155,13 @@ score = w_rel · relevance(cosine)
 - **多角色 ready 的資料層**：schema 全表帶 `character_id`（`Repositories.create(path, character_id)` 建構時綁定，domain 呼叫端零負擔）；user_id 一律 `channel:id` 命名空間。
 - **完成標準（已驗收）**：`ADAPTER=cli python -m kana` 不需 Discord token 可對話；引擎 .py grep 不到人設文字；角色隔離與命名空間有測試背書（25 測試綠）。
 
-### Phase 1 — 對話品質 + 角色深化
-- 對話節奏：log-normal 延遲、typing、多則訊息緩衝合併、回覆拆條（自然的多則短訊）。
-- 關係演化：對話後 known_facts / familiarity / affection 抽取更新（結構化輸出，欄位過髒資料——v1 的 dict 混入 list 就是死因）。
-- **背景故事擴寫**：backstory.md 從設定卡擴成傳記（成長史、家庭、人際網、為什麼是現在的她）——「humanoid 需要完整背景故事」的解法。
-- 語氣迭代：用 CLI adapter 快速實測 speech.md few-shot，把人格調到「可接受」。
-- **完成標準**：DM 對話順暢、語氣大致對味；delay/關係抽取可單元測試；驗收工具是 CLI adapter。
+### Phase 1 — 對話品質 + 角色深化 🔄（機制完成，語氣迭代進行中）
+- ✅ 對話節奏：`domain/pacing.py` 純函式決策（log-normal 延遲、回覆拆條、緩衝窗口），adapter 執行（Discord：緩衝合併＋typing＋間隔送出；CLI：直印不延遲）。handler 契約改為 `InboundMessage → ReplyPlan`。
+- ✅ 關係演化：`domain/relationship.py`——Ollama JSON schema 結構化輸出 + `EvolutionResult` Pydantic 淨化層（list 逐項強制字串、delta 夾範圍——v1 的 dict 混入 list 死因的直接對策）；known_facts 去重＋上限 30（遺忘是 feature）；對話摘要寫入 episodic memory（Phase 2 檢索資料從此開始累積）。
+- ✅ 背景故事擴寫：backstory.md 已是傳記（台南五金行、高中被排擠學會不動聲色、失眠期撞到 ZUTOMAYO、阿禹/小霈/妤婷人際網——Phase 3 生活事件的現成配角名單）。
+- 🔄 語氣迭代：CLI 實測已修三輪（主詞混淆的事實抽取、假承諾句式、括號舞台指示、編造歌名→tastes.md 錨定真實曲目清單）；持續用 `python -m kana cli` 迭代。
+- **v1 的承諾抽取（todo_commitments）確定不做**：實測效果不好。never.md 反向處理：她不說做不到的承諾。
+- **完成標準**：DM 對話順暢、語氣大致對味；delay/關係抽取可單元測試（✅ 45 測試綠）；驗收工具是 CLI adapter。
 
 ### Phase 2 — 檢索式記憶
 - episodic memory + sqlite-vec，三項加權檢索、去重、衰減。寫入天然帶 character_id 與命名空間化 user_id。
@@ -216,7 +217,7 @@ score = w_rel · relevance(cosine)
 
 ## 8. 保留 / 捨棄
 
-- **捨棄**：全部舊 code、舊 `data/kana.db`、`src/kana.db`（0-byte 殘檔）、各 `fix_*.py` / `test_*.py` 一次性腳本。
+- **捨棄**：全部舊 code、舊 `data/kana.db`、`src/kana.db`（0-byte 殘檔）、各 `fix_*.py` / `test_*.py` 一次性腳本。承諾消化 pipeline（todo_commitments）——實測效果不好，v2 不做。
 - **保留**：`.env` 裡的 Discord token、Threads access token / user id、admin/owner id。其餘金鑰視 Phase 5 是否用雲再定。
 - **v1 內容資產遷移對照表**（備份在 `kana_v1_backup_2026-06-18.zip`）：
 

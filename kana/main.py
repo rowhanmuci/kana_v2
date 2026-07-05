@@ -69,13 +69,16 @@ async def _main(adapter_override: str | None = None) -> None:
 
     llm = LLMClient.from_settings(settings)
     builder = PersonaPromptBuilder(character)
-    conversation = ConversationService(repos, llm, builder)
+    # CLI 是調語氣的迴路，不模擬延遲
+    scale = 0.0 if settings.adapter == "cli" else settings.pacing_scale
+    conversation = ConversationService(repos, llm, builder, pacing_scale=scale)
 
     logger.info("啟動 %s v2（adapter=%s, chat=%s）", character.name, adapter.name, settings.chat_model)
     try:
         await adapter.run(conversation.handle)
     finally:
         await adapter.close()
+        await conversation.drain()  # 等背景的關係演化跑完再關 DB
         await repos.close()
 
 

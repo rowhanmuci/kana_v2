@@ -4,7 +4,7 @@ from kana.config import Settings
 def test_defaults_and_routing():
     s = Settings(_env_file=None)
     assert s.chat_model == "qwen3:14b"
-    assert s.utility_model == "qwen3:8b"
+    assert s.utility_model == "qwen3:14b"  # 預設同 chat：12GB VRAM 避免模型交換
 
     chat = s.route("chat")
     assert chat.provider == "ollama"

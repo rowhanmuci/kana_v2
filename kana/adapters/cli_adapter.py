@@ -43,8 +43,15 @@ class CliAdapter:
                 display_name=self._display_name,
                 text=text,
             )
-            reply = await on_message(msg)
-            print(reply if reply else "（沒有回覆）")
+            plan = await on_message(msg)
+            if plan.is_empty:
+                print("（沒有回覆）")
+                continue
+            # CLI 是調語氣的迴路，不模擬延遲；只在多條時提示原本的節奏
+            if plan.initial_delay > 1:
+                print(f"（{plan.initial_delay:.0f} 秒後…）")
+            for part in plan.parts:
+                print(part)
 
     async def send(self, recipient_id: str, text: str) -> None:
         print(f"（主動訊息 → {recipient_id}）{text}")

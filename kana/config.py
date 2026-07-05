@@ -41,8 +41,14 @@ class Settings(BaseSettings):
     # ── 本地模型 ──
     ollama_host: str = "http://localhost:11434"
     chat_model: str = "qwen3:14b"
-    utility_model: str = "qwen3:8b"
+    # 背景呼叫（關係抽取等）預設跟 chat 同一顆：12GB VRAM 放不下兩個模型，
+    # 分開會導致 Ollama 每次呼叫交換模型（幾秒的載入）。要省算力可設 UTILITY_MODEL=qwen3:8b。
+    utility_model: str = "qwen3:14b"
     embedding_model: str = "bge-m3"
+
+    # ── 對話節奏 ──
+    # 延遲整體縮放：1.0 = 真實節奏（idle 中位數約 1 分鐘）；測試/調校設 0 立即回。
+    pacing_scale: float = 1.0
 
     # ── 資料庫 ──
     database_path: str = "./data/kana.db"
